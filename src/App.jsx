@@ -1,9 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 
-const STORAGE_KEY_TASKS = "agenda_tasks";
-const STORAGE_KEY_GOALS = "agenda_goals";
-const STORAGE_KEY_EVENTS = "agenda_events";
-
 const DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
@@ -17,393 +13,173 @@ const CATEGORIES = {
 };
 
 function loadData(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key)) || fallback; }
-  catch { return fallback; }
+  try {
+    const item = window.localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch { return fallback; }
 }
 
 function saveData(key, data) {
-  try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
-}
-
-// Register service worker
-async function registerSW() {
-  if (!("serviceWorker" in navigator)) return null;
-  try {
-    const reg = await navigator.serviceWorker.register("/sw.js");
-    await navigator.serviceWorker.ready;
-    return reg;
-  } catch (e) {
-    console.warn("SW registration failed:", e);
-    return null;
-  }
-}
-
-async function scheduleViaSW(title, body, delayMs) {
-  if (!("serviceWorker" in navigator)) return;
-  const reg = await navigator.serviceWorker.ready;
-  if (reg && reg.active) {
-    reg.active.postMessage({ type: "SCHEDULE_NOTIF", title, body, delay: delayMs });
-  }
+  try { window.localStorage.setItem(key, JSON.stringify(data)); } catch {}
 }
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Epilogue:wght@300;400;500&display=swap');
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #f5f2ee;
-    --bg2: #edeae4;
-    --card: #ffffff;
-    --border: #e0dbd3;
-    --text: #1a1814;
-    --text2: #6b6560;
-    --accent: #c84b31;
-    --accent2: #e8a87c;
+    --bg: #f5f2ee; --bg2: #edeae4; --card: #ffffff; --border: #e0dbd3;
+    --text: #1a1814; --text2: #6b6560; --accent: #c84b31; --accent2: #e8a87c;
   }
-
-  body { background: var(--bg); color: var(--text); font-family: 'Epilogue', sans-serif; }
-  .app { min-height: 100vh; display: flex; flex-direction: column; }
-
-  .header {
-    background: var(--text);
-    color: var(--bg);
-    padding: 20px 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-
-  .header-left { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-  .header-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
-  .header-date { font-size: 12px; color: #888; font-weight: 300; }
-
-  .notif-btn {
-    background: transparent;
-    border: 1px solid #444;
-    color: #aaa;
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 12px;
-    cursor: pointer;
-    font-family: 'Epilogue', sans-serif;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
+  body { background: var(--bg); color: var(--text); font-family: 'Epilogue', sans-serif; -webkit-text-size-adjust: 100%; }
+  .app { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; }
+  .header { background: var(--text); color: var(--bg); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .header-left { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .header-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+  .header-date { font-size: 11px; color: #888; font-weight: 300; }
+  .notif-btn { background: transparent; border: 1px solid #444; color: #aaa; padding: 6px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-family: 'Epilogue', sans-serif; transition: all 0.2s; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
   .notif-btn.active { border-color: #e8a87c; color: #e8a87c; }
-  .notif-btn:hover { border-color: #888; color: #ddd; }
-
-  .tabs {
-    display: flex;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    padding: 0 28px;
-    gap: 4px;
-  }
-
-  .tab {
-    padding: 14px 20px;
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    background: transparent;
-    border: none;
-    color: var(--text2);
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-  }
+  .tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 16px; gap: 2px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { padding: 12px 16px; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; cursor: pointer; background: transparent; border: none; color: var(--text2); border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tab:hover:not(.active) { color: var(--text); }
-
-  .main { flex: 1; padding: 24px 28px; max-width: 900px; width: 100%; margin: 0 auto; }
-
-  .section-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--text2);
-    margin-bottom: 14px;
-    margin-top: 28px;
-  }
+  .main { flex: 1; padding: 16px; max-width: 900px; width: 100%; margin: 0 auto; }
+  .section-title { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--text2); margin-bottom: 12px; margin-top: 24px; }
   .section-title:first-child { margin-top: 0; }
-
-  .task-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 8px;
-    transition: all 0.2s;
-  }
+  .task-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
   .task-item.done { opacity: 0.5; }
-  .task-item:hover { border-color: #ccc; }
-
-  .task-check {
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    cursor: pointer;
-    flex-shrink: 0;
-    margin-top: 2px;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s;
-  }
+  .task-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
   .task-check.checked { background: var(--accent); border-color: var(--accent); }
-  .task-check.checked::after { content: '✓'; color: white; font-size: 11px; }
-
-  .task-content { flex: 1; }
-  .task-name { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.4; }
+  .task-check.checked::after { content: '✓'; color: white; font-size: 12px; }
+  .task-content { flex: 1; min-width: 0; }
+  .task-name { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.4; word-break: break-word; }
   .task-item.done .task-name { text-decoration: line-through; color: var(--text2); }
-
-  .task-meta { display: flex; gap: 8px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
+  .task-meta { display: flex; gap: 6px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
   .task-cat { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
   .task-time { font-size: 11px; color: var(--text2); }
-
-  .task-delete {
-    background: none; border: none; color: #ccc; cursor: pointer;
-    font-size: 16px; padding: 0 4px; transition: color 0.2s; flex-shrink: 0;
-  }
-  .task-delete:hover { color: var(--accent); }
-
-  .add-form {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin-bottom: 20px;
-  }
-
-  .form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .task-delete { background: none; border: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 0 4px; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
+  .add-form { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   .form-row:last-child { margin-bottom: 0; }
-
-  .input {
-    flex: 1; min-width: 140px;
-    padding: 10px 14px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-family: 'Epilogue', sans-serif;
-    font-size: 14px;
-    background: var(--bg);
-    color: var(--text);
-    outline: none;
-    transition: border-color 0.2s;
-  }
+  .input { flex: 1; min-width: 120px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: 'Epilogue', sans-serif; font-size: 16px; background: var(--bg); color: var(--text); outline: none; -webkit-appearance: none; }
   .input:focus { border-color: var(--accent); }
-
-  .select {
-    padding: 10px 14px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-family: 'Epilogue', sans-serif;
-    font-size: 13px;
-    background: var(--bg);
-    color: var(--text);
-    outline: none;
-    cursor: pointer;
-  }
-
-  .btn {
-    padding: 10px 20px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    transition: all 0.2s;
-  }
+  .select { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: 'Epilogue', sans-serif; font-size: 14px; background: var(--bg); color: var(--text); outline: none; cursor: pointer; -webkit-appearance: none; }
+  .btn { padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
   .btn-primary { background: var(--accent); color: white; }
-  .btn-primary:hover { background: #b03d28; }
   .btn-secondary { background: var(--bg2); color: var(--text); border: 1px solid var(--border); }
-  .btn-secondary:hover { background: var(--border); }
-
-  .calendar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
-
-  .calendar-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px; border-bottom: 1px solid var(--border);
-  }
-  .calendar-title { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; }
-
-  .cal-nav {
-    background: none; border: 1px solid var(--border); border-radius: 6px;
-    padding: 4px 10px; cursor: pointer; font-size: 14px; color: var(--text2); transition: all 0.2s;
-  }
-  .cal-nav:hover { background: var(--bg2); }
-
+  .calendar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+  .calendar-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .calendar-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
+  .cal-nav { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 16px; color: var(--text2); -webkit-tap-highlight-color: transparent; }
   .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
-
-  .cal-day-name {
-    text-align: center; padding: 10px 4px; font-size: 11px; font-weight: 600;
-    color: var(--text2); letter-spacing: 1px; text-transform: uppercase;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .cal-day {
-    aspect-ratio: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; cursor: pointer;
-    font-size: 13px; border-right: 1px solid var(--bg2); border-bottom: 1px solid var(--bg2);
-    transition: all 0.15s; gap: 2px; padding: 4px;
-  }
-  .cal-day:hover { background: var(--bg2); }
+  .cal-day-name { text-align: center; padding: 8px 2px; font-size: 10px; font-weight: 600; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  .cal-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; border-right: 1px solid var(--bg2); border-bottom: 1px solid var(--bg2); gap: 2px; -webkit-tap-highlight-color: transparent; }
   .cal-day.today { background: var(--accent); color: white; font-weight: 700; }
-  .cal-day.today:hover { background: #b03d28; }
-  .cal-day.selected { background: var(--bg2); border: 2px solid var(--accent); }
+  .cal-day.selected { background: var(--bg2); outline: 2px solid var(--accent); }
   .cal-day.other-month { color: #ccc; }
   .cal-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--accent2); }
   .cal-day.today .cal-dot { background: white; }
-
-  .event-item {
-    display: flex; gap: 14px; padding: 12px 16px;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 10px; margin-bottom: 8px; align-items: flex-start;
-  }
-  .event-time-block { text-align: center; min-width: 44px; }
-  .event-time { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--accent); }
+  .event-item { display: flex; gap: 12px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; align-items: flex-start; }
+  .event-time-block { text-align: center; min-width: 40px; }
+  .event-time { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--accent); }
   .event-ampm { font-size: 10px; color: var(--text2); }
-  .event-bar { width: 3px; border-radius: 2px; align-self: stretch; min-height: 30px; }
-  .event-content { flex: 1; }
-  .event-name { font-size: 14px; font-weight: 500; }
+  .event-bar { width: 3px; border-radius: 2px; align-self: stretch; min-height: 24px; flex-shrink: 0; }
+  .event-content { flex: 1; min-width: 0; }
+  .event-name { font-size: 14px; font-weight: 500; word-break: break-word; }
   .event-desc { font-size: 12px; color: var(--text2); margin-top: 2px; }
-
-  .goal-item {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 10px; padding: 16px 18px; margin-bottom: 10px;
-  }
+  .goal-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
   .goal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .goal-name { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
+  .goal-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; }
   .goal-pct { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: var(--accent); }
   .goal-bar-bg { height: 6px; background: var(--bg2); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
   .goal-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
   .goal-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); }
-  .goal-actions { display: flex; gap: 6px; margin-top: 10px; }
-  .progress-btn {
-    padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--bg); font-size: 12px; cursor: pointer;
-    font-family: 'Epilogue', sans-serif; transition: all 0.2s;
-  }
-  .progress-btn:hover { background: var(--bg2); }
-
+  .goal-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .progress-btn { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; cursor: pointer; font-family: 'Epilogue', sans-serif; -webkit-tap-highlight-color: transparent; }
   .empty { text-align: center; padding: 40px 20px; color: var(--text2); font-size: 14px; }
   .empty-icon { font-size: 32px; margin-bottom: 10px; }
-
-  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
-  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; text-align: center; }
-  .stat-num { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1; }
-  .stat-lbl { font-size: 11px; color: var(--text2); margin-top: 4px; letter-spacing: 0.5px; }
-
-  .notif-banner {
-    background: #fff8f0; border: 1px solid #e8a87c; border-radius: 10px;
-    padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #7a4a20;
-    display: flex; align-items: center; gap: 10px;
-  }
-
-  @media (max-width: 600px) {
-    .main { padding: 16px; }
-    .tabs { padding: 0 16px; }
-    .header { padding: 16px; }
-    .tab { padding: 12px 14px; font-size: 12px; }
-    .form-row { flex-direction: column; }
-  }
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px; text-align: center; }
+  .stat-num { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: var(--accent); line-height: 1; }
+  .stat-lbl { font-size: 10px; color: var(--text2); margin-top: 4px; letter-spacing: 0.5px; }
+  .notif-banner { background: #fff8f0; border: 1px solid #e8a87c; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; color: #7a4a20; display: flex; align-items: center; gap: 8px; }
+  .row-space { display: flex; justify-content: space-between; align-items: center; }
 `;
 
 export default function Agenda() {
   const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+
   const [tab, setTab] = useState("hoje");
-  const [tasks, setTasks] = useState(() => loadData(STORAGE_KEY_TASKS, []));
-  const [goals, setGoals] = useState(() => loadData(STORAGE_KEY_GOALS, [
-    { id: 1, name: "Estudar Alemão", category: "alemao", target: 30, current: 8, unit: "aulas", deadline: "2025-12-31" },
-    { id: 2, name: "Horas Terra AUV", category: "terra", target: 100, current: 23, unit: "horas", deadline: "2025-07-01" },
-    { id: 3, name: "Recuperação Acidente", category: "saude", target: 30, current: 18, unit: "dias", deadline: "2025-06-30" },
-  ]));
-  const [events, setEvents] = useState(() => loadData(STORAGE_KEY_EVENTS, []));
+  const [tasks, setTasks] = useState([]);
+  const [goals, setGoals] = useState([]);
+  const [events, setEvents] = useState([]);
   const [calDate, setCalDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(today.getDate());
   const [notifEnabled, setNotifEnabled] = useState(false);
-  const [swReady, setSwReady] = useState(false);
-
-  const [newTask, setNewTask] = useState({ name: "", category: "faculdade", time: "", date: "" });
-  const [newEvent, setNewEvent] = useState({ name: "", date: "", time: "", desc: "", category: "faculdade" });
+  const [newTask, setNewTask] = useState({ name: "", category: "faculdade", time: "", date: todayStr });
+  const [newEvent, setNewEvent] = useState({ name: "", date: todayStr, time: "", desc: "", category: "faculdade" });
   const [newGoal, setNewGoal] = useState({ name: "", category: "pessoal", target: "", unit: "", deadline: "" });
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGoal, setShowAddGoal] = useState(false);
 
-  useEffect(() => { saveData(STORAGE_KEY_TASKS, tasks); }, [tasks]);
-  useEffect(() => { saveData(STORAGE_KEY_GOALS, goals); }, [goals]);
-  useEffect(() => { saveData(STORAGE_KEY_EVENTS, events); }, [events]);
-
+  // Load from localStorage after mount (safe for Safari)
   useEffect(() => {
-    registerSW().then(reg => { if (reg) setSwReady(true); });
-    if (Notification.permission === "granted") setNotifEnabled(true);
+    setTasks(loadData("agenda_tasks", []));
+    setGoals(loadData("agenda_goals", [
+      { id: 1, name: "Estudar Alemão", category: "alemao", target: 30, current: 8, unit: "aulas", deadline: "2025-12-31" },
+      { id: 2, name: "Horas Terra AUV", category: "terra", target: 100, current: 23, unit: "horas", deadline: "2025-07-01" },
+      { id: 3, name: "Recuperação Acidente", category: "saude", target: 30, current: 18, unit: "dias", deadline: "2025-06-30" },
+    ]));
+    setEvents(loadData("agenda_events", []));
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") setNotifEnabled(true);
   }, []);
+
+  useEffect(() => { saveData("agenda_tasks", tasks); }, [tasks]);
+  useEffect(() => { saveData("agenda_goals", goals); }, [goals]);
+  useEffect(() => { saveData("agenda_events", events); }, [events]);
 
   const requestNotifications = async () => {
     if (!("Notification" in window)) return alert("Seu navegador não suporta notificações.");
-    const perm = await Notification.requestPermission();
-    if (perm === "granted") {
-      setNotifEnabled(true);
-      await registerSW();
-      setSwReady(true);
-      new Notification("✅ Agenda Gustavo", {
-        body: "Notificações ativadas! Você será avisado 30 minutos antes de cada tarefa.",
-        icon: "/favicon.ico",
-      });
-    }
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm === "granted") {
+        setNotifEnabled(true);
+        new Notification("✅ Agenda Gustavo", { body: "Notificações ativadas! Aviso 30 min antes de cada tarefa." });
+      }
+    } catch (e) { console.warn(e); }
   };
 
-  const scheduleNotification = useCallback(async (task) => {
-    if (!task.time || !task.date) return;
-    const [h, m] = task.time.split(":").map(Number);
-    const taskTime = new Date(task.date + "T" + task.time);
-    const notifTime = new Date(taskTime.getTime() - 30 * 60 * 1000); // 30 min antes
-    const diff = notifTime - new Date();
-    if (diff <= 0) return;
+  const scheduleNotification = useCallback((task) => {
+    if (!task.time || !task.date || !notifEnabled) return;
+    try {
+      const taskTime = new Date(task.date + "T" + task.time + ":00");
+      const notifTime = new Date(taskTime.getTime() - 30 * 60 * 1000);
+      const diff = notifTime - new Date();
+      if (diff <= 0) return;
+      const cat = CATEGORIES[task.category] || CATEGORIES.outro;
+      setTimeout(() => {
+        new Notification(`⏰ ${task.name}`, { body: `${cat.icon} ${cat.label} — em 30 minutos (${task.time})` });
+      }, diff);
+    } catch (e) { console.warn(e); }
+  }, [notifEnabled]);
 
-    const cat = CATEGORIES[task.category] || CATEGORIES.outro;
-    const title = `⏰ ${task.name}`;
-    const body = `${cat.icon} ${cat.label} — em 30 minutos (${task.time})`;
-
-    if (swReady) {
-      await scheduleViaSW(title, body, diff);
-    } else if (notifEnabled) {
-      setTimeout(() => new Notification(title, { body, icon: "/favicon.ico", requireInteraction: true }), diff);
-    }
-  }, [notifEnabled, swReady]);
-
-  const addTask = useCallback((overrideDate) => {
+  const addTask = (overrideDate) => {
     if (!newTask.name.trim()) return;
-    const task = {
-      ...newTask,
-      id: Date.now(),
-      done: false,
-      date: overrideDate || newTask.date || today.toISOString().split("T")[0],
-    };
+    const task = { ...newTask, id: Date.now(), done: false, date: overrideDate || newTask.date || todayStr };
     setTasks(t => [...t, task]);
     scheduleNotification(task);
-    setNewTask({ name: "", category: "faculdade", time: "", date: "" });
+    setNewTask({ name: "", category: "faculdade", time: "", date: todayStr });
     setShowAddTask(false);
-  }, [newTask, scheduleNotification, today]);
+  };
 
-  const addEvent = useCallback((overrideDate) => {
+  const addEvent = (overrideDate) => {
     if (!newEvent.name.trim()) return;
-    const event = { ...newEvent, id: Date.now(), date: overrideDate || newEvent.date };
-    if (!event.date) return;
-    setEvents(e => [...e, event]);
-    setNewEvent({ name: "", date: "", time: "", desc: "", category: "faculdade" });
+    const ev = { ...newEvent, id: Date.now(), date: overrideDate || newEvent.date };
+    if (!ev.date) return;
+    setEvents(e => [...e, ev]);
+    setNewEvent({ name: "", date: todayStr, time: "", desc: "", category: "faculdade" });
     setShowAddEvent(false);
-  }, [newEvent]);
+  };
 
   const addGoal = () => {
     if (!newGoal.name.trim() || !newGoal.target) return;
@@ -418,7 +194,6 @@ export default function Agenda() {
   const deleteGoal = (id) => setGoals(g => g.filter(gl => gl.id !== id));
   const updateGoalProgress = (id, delta) => setGoals(g => g.map(gl => gl.id === id ? { ...gl, current: Math.max(0, Math.min(gl.target, gl.current + delta)) } : gl));
 
-  const todayStr = today.toISOString().split("T")[0];
   const todayTasks = tasks.filter(t => t.date === todayStr);
   const doneTasks = todayTasks.filter(t => t.done).length;
 
@@ -450,11 +225,11 @@ export default function Agenda() {
       <div className="app">
         <div className="header">
           <div className="header-left">
-            <div className="header-title">AGENDA GUSTAVO</div>
+            <div className="header-title">AGENDA</div>
             <div className="header-date">{DAYS[today.getDay()]}, {today.getDate()} de {MONTHS[today.getMonth()]}</div>
           </div>
           <button className={`notif-btn ${notifEnabled ? "active" : ""}`} onClick={requestNotifications}>
-            {notifEnabled ? "🔔 Notif. ativas" : "🔕 Ativar notif."}
+            {notifEnabled ? "🔔 Ativo" : "🔕 Notif."}
           </button>
         </div>
 
@@ -465,50 +240,37 @@ export default function Agenda() {
         </div>
 
         <div className="main">
-          {/* HOJE */}
           {tab === "hoje" && (
             <>
               {!notifEnabled && (
-                <div className="notif-banner">
-                  🔔 <span>Ative as notificações no botão acima para ser avisado <strong>30 minutos antes</strong> de cada tarefa!</span>
-                </div>
+                <div className="notif-banner">🔔 <span>Ative as notificações para ser avisado <strong>30 min antes</strong> de cada tarefa!</span></div>
               )}
-
               <div className="stats-row">
-                <div className="stat-card">
-                  <div className="stat-num">{todayTasks.length}</div>
-                  <div className="stat-lbl">Tarefas hoje</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-num">{doneTasks}</div>
-                  <div className="stat-lbl">Concluídas</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-num">{todayTasks.length > 0 ? Math.round(doneTasks / todayTasks.length * 100) : 0}%</div>
-                  <div className="stat-lbl">Progresso</div>
-                </div>
+                <div className="stat-card"><div className="stat-num">{todayTasks.length}</div><div className="stat-lbl">Tarefas</div></div>
+                <div className="stat-card"><div className="stat-num">{doneTasks}</div><div className="stat-lbl">Feitas</div></div>
+                <div className="stat-card"><div className="stat-num">{todayTasks.length > 0 ? Math.round(doneTasks / todayTasks.length * 100) : 0}%</div><div className="stat-lbl">Progresso</div></div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div className="row-space">
                 <div className="section-title">Tarefas de Hoje</div>
-                <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 14px", marginBottom: 14 }} onClick={() => setShowAddTask(!showAddTask)}>
-                  {showAddTask ? "✕ Cancelar" : "+ Nova tarefa"}
+                <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 12px", marginBottom: 12 }} onClick={() => setShowAddTask(!showAddTask)}>
+                  {showAddTask ? "✕" : "+ Nova"}
                 </button>
               </div>
 
               {showAddTask && (
                 <div className="add-form">
                   <div className="form-row">
-                    <input className="input" placeholder="Nome da tarefa..." value={newTask.name}
-                      onChange={e => setNewTask({ ...newTask, name: e.target.value })}
-                      onKeyDown={e => e.key === "Enter" && addTask()} />
+                    <input className="input" placeholder="Nome da tarefa..." value={newTask.name} onChange={e => setNewTask({ ...newTask, name: e.target.value })} />
                   </div>
                   <div className="form-row">
                     <select className="select" value={newTask.category} onChange={e => setNewTask({ ...newTask, category: e.target.value })}>
                       {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
                     </select>
-                    <input className="input" type="time" value={newTask.time} onChange={e => setNewTask({ ...newTask, time: e.target.value })} style={{ maxWidth: 130 }} />
-                    <input className="input" type="date" value={newTask.date || todayStr} onChange={e => setNewTask({ ...newTask, date: e.target.value })} style={{ maxWidth: 160 }} />
+                    <input className="input" type="time" value={newTask.time} onChange={e => setNewTask({ ...newTask, time: e.target.value })} style={{ maxWidth: 120 }} />
+                  </div>
+                  <div className="form-row">
+                    <input className="input" type="date" value={newTask.date} onChange={e => setNewTask({ ...newTask, date: e.target.value })} />
                     <button className="btn btn-primary" onClick={() => addTask()}>Adicionar</button>
                   </div>
                 </div>
@@ -516,28 +278,26 @@ export default function Agenda() {
 
               {todayTasks.length === 0 ? (
                 <div className="empty"><div className="empty-icon">✅</div>Nenhuma tarefa para hoje!</div>
-              ) : (
-                todayTasks.map(task => {
-                  const cat = CATEGORIES[task.category] || CATEGORIES.outro;
-                  return (
-                    <div key={task.id} className={`task-item ${task.done ? "done" : ""}`}>
-                      <div className={`task-check ${task.done ? "checked" : ""}`} onClick={() => toggleTask(task.id)} />
-                      <div className="task-content">
-                        <div className="task-name">{task.name}</div>
-                        <div className="task-meta">
-                          <span className="task-cat" style={{ background: cat.color + "22", color: cat.color }}>{cat.icon} {cat.label}</span>
-                          {task.time && <span className="task-time">⏰ {task.time} (aviso 30min antes)</span>}
-                        </div>
+              ) : todayTasks.map(task => {
+                const cat = CATEGORIES[task.category] || CATEGORIES.outro;
+                return (
+                  <div key={task.id} className={`task-item ${task.done ? "done" : ""}`}>
+                    <div className={`task-check ${task.done ? "checked" : ""}`} onClick={() => toggleTask(task.id)} />
+                    <div className="task-content">
+                      <div className="task-name">{task.name}</div>
+                      <div className="task-meta">
+                        <span className="task-cat" style={{ background: cat.color + "22", color: cat.color }}>{cat.icon} {cat.label}</span>
+                        {task.time && <span className="task-time">⏰ {task.time}</span>}
                       </div>
-                      <button className="task-delete" onClick={() => deleteTask(task.id)}>✕</button>
                     </div>
-                  );
-                })
-              )}
+                    <button className="task-delete" onClick={() => deleteTask(task.id)}>✕</button>
+                  </div>
+                );
+              })}
 
               {allUpcoming.slice(0, 3).length > 0 && (
                 <>
-                  <div className="section-title" style={{ marginTop: 28 }}>Próximos Eventos</div>
+                  <div className="section-title">Próximos Eventos</div>
                   {allUpcoming.slice(0, 3).map(ev => {
                     const cat = CATEGORIES[ev.category] || CATEGORIES.outro;
                     return (
@@ -559,7 +319,6 @@ export default function Agenda() {
             </>
           )}
 
-          {/* AGENDA */}
           {tab === "agenda" && (
             <>
               <div className="calendar">
@@ -569,7 +328,7 @@ export default function Agenda() {
                   <button className="cal-nav" onClick={() => setCalDate(new Date(calYear, calMonth + 1, 1))}>›</button>
                 </div>
                 <div className="calendar-grid">
-                  {DAYS.map(d => <div key={d} className="cal-day-name">{d}</div>)}
+                  {DAYS.map(d => <div key={d} className="cal-day-name">{d[0]}</div>)}
                   {calDays.map((d, i) => {
                     const isToday = d.current && d.day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
                     const isSelected = d.current && d.day === selectedDay && calMonth === calDate.getMonth();
@@ -584,22 +343,24 @@ export default function Agenda() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div className="row-space">
                 <div className="section-title">{selectedDay}/{calMonth + 1}/{calYear}</div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                  <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 14px" }} onClick={() => setShowAddTask(!showAddTask)}>+ Tarefa</button>
-                  <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 14px" }} onClick={() => setShowAddEvent(!showAddEvent)}>+ Evento</button>
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 10px" }} onClick={() => setShowAddTask(!showAddTask)}>+ Tarefa</button>
+                  <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 10px" }} onClick={() => setShowAddEvent(!showAddEvent)}>+ Evento</button>
                 </div>
               </div>
 
               {showAddTask && (
                 <div className="add-form">
                   <div className="form-row">
-                    <input className="input" placeholder="Nome da tarefa..." value={newTask.name} onChange={e => setNewTask({ ...newTask, name: e.target.value })} />
+                    <input className="input" placeholder="Tarefa..." value={newTask.name} onChange={e => setNewTask({ ...newTask, name: e.target.value })} />
+                  </div>
+                  <div className="form-row">
                     <select className="select" value={newTask.category} onChange={e => setNewTask({ ...newTask, category: e.target.value })}>
                       {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
                     </select>
-                    <input className="input" type="time" value={newTask.time} onChange={e => setNewTask({ ...newTask, time: e.target.value })} style={{ maxWidth: 130 }} />
+                    <input className="input" type="time" value={newTask.time} onChange={e => setNewTask({ ...newTask, time: e.target.value })} style={{ maxWidth: 120 }} />
                     <button className="btn btn-primary" onClick={() => addTask(selectedDateStr)}>Add</button>
                   </div>
                 </div>
@@ -608,21 +369,21 @@ export default function Agenda() {
               {showAddEvent && (
                 <div className="add-form">
                   <div className="form-row">
-                    <input className="input" placeholder="Nome do evento..." value={newEvent.name} onChange={e => setNewEvent({ ...newEvent, name: e.target.value })} />
-                    <input className="input" type="time" value={newEvent.time} onChange={e => setNewEvent({ ...newEvent, time: e.target.value })} style={{ maxWidth: 130 }} />
+                    <input className="input" placeholder="Evento..." value={newEvent.name} onChange={e => setNewEvent({ ...newEvent, name: e.target.value })} />
+                    <input className="input" type="time" value={newEvent.time} onChange={e => setNewEvent({ ...newEvent, time: e.target.value })} style={{ maxWidth: 120 }} />
                   </div>
                   <div className="form-row">
-                    <input className="input" placeholder="Descrição (opcional)" value={newEvent.desc} onChange={e => setNewEvent({ ...newEvent, desc: e.target.value })} />
                     <select className="select" value={newEvent.category} onChange={e => setNewEvent({ ...newEvent, category: e.target.value })}>
                       {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
                     </select>
+                    <input className="input" placeholder="Descrição (opcional)" value={newEvent.desc} onChange={e => setNewEvent({ ...newEvent, desc: e.target.value })} />
                     <button className="btn btn-primary" onClick={() => addEvent(selectedDateStr)}>Add</button>
                   </div>
                 </div>
               )}
 
               {selectedTasks.length === 0 && selectedEvents.length === 0 ? (
-                <div className="empty"><div className="empty-icon">📅</div>Nenhuma tarefa ou evento neste dia.</div>
+                <div className="empty"><div className="empty-icon">📅</div>Nenhuma tarefa ou evento.</div>
               ) : (
                 <>
                   {selectedEvents.map(ev => {
@@ -660,13 +421,12 @@ export default function Agenda() {
             </>
           )}
 
-          {/* METAS */}
           {tab === "metas" && (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div className="row-space">
                 <div className="section-title">Metas de Longo Prazo</div>
-                <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 14px", marginBottom: 14 }} onClick={() => setShowAddGoal(!showAddGoal)}>
-                  {showAddGoal ? "✕ Cancelar" : "+ Nova meta"}
+                <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 12px", marginBottom: 12 }} onClick={() => setShowAddGoal(!showAddGoal)}>
+                  {showAddGoal ? "✕" : "+ Nova"}
                 </button>
               </div>
 
@@ -679,46 +439,46 @@ export default function Agenda() {
                     </select>
                   </div>
                   <div className="form-row">
-                    <input className="input" type="number" placeholder="Meta total (ex: 30)" value={newGoal.target} onChange={e => setNewGoal({ ...newGoal, target: e.target.value })} style={{ maxWidth: 160 }} />
-                    <input className="input" placeholder="Unidade (ex: aulas, km, horas)" value={newGoal.unit} onChange={e => setNewGoal({ ...newGoal, unit: e.target.value })} />
-                    <input className="input" type="date" value={newGoal.deadline} onChange={e => setNewGoal({ ...newGoal, deadline: e.target.value })} style={{ maxWidth: 160 }} />
+                    <input className="input" type="number" placeholder="Meta total (ex: 30)" value={newGoal.target} onChange={e => setNewGoal({ ...newGoal, target: e.target.value })} />
+                    <input className="input" placeholder="Unidade (ex: aulas)" value={newGoal.unit} onChange={e => setNewGoal({ ...newGoal, unit: e.target.value })} />
+                  </div>
+                  <div className="form-row">
+                    <input className="input" type="date" value={newGoal.deadline} onChange={e => setNewGoal({ ...newGoal, deadline: e.target.value })} />
                     <button className="btn btn-primary" onClick={addGoal}>Adicionar</button>
                   </div>
                 </div>
               )}
 
               {goals.length === 0 ? (
-                <div className="empty"><div className="empty-icon">🎯</div>Nenhuma meta cadastrada ainda.</div>
-              ) : (
-                goals.map(goal => {
-                  const cat = CATEGORIES[goal.category] || CATEGORIES.outro;
-                  const pct = Math.round((goal.current / goal.target) * 100);
-                  return (
-                    <div key={goal.id} className="goal-item">
-                      <div className="goal-header">
-                        <div>
-                          <div className="goal-name">{cat.icon} {goal.name}</div>
-                          {goal.deadline && <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Prazo: {goal.deadline}</div>}
-                        </div>
-                        <div className="goal-pct">{pct}%</div>
+                <div className="empty"><div className="empty-icon">🎯</div>Nenhuma meta ainda.</div>
+              ) : goals.map(goal => {
+                const cat = CATEGORIES[goal.category] || CATEGORIES.outro;
+                const pct = Math.round((goal.current / goal.target) * 100);
+                return (
+                  <div key={goal.id} className="goal-item">
+                    <div className="goal-header">
+                      <div>
+                        <div className="goal-name">{cat.icon} {goal.name}</div>
+                        {goal.deadline && <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Prazo: {goal.deadline}</div>}
                       </div>
-                      <div className="goal-bar-bg">
-                        <div className="goal-bar-fill" style={{ width: `${pct}%`, background: cat.color }} />
-                      </div>
-                      <div className="goal-meta">
-                        <span>{goal.current} / {goal.target} {goal.unit}</span>
-                        <span style={{ color: cat.color }}>{cat.label}</span>
-                      </div>
-                      <div className="goal-actions">
-                        <button className="progress-btn" onClick={() => updateGoalProgress(goal.id, -1)}>− 1</button>
-                        <button className="progress-btn" onClick={() => updateGoalProgress(goal.id, 1)}>+ 1</button>
-                        <button className="progress-btn" onClick={() => updateGoalProgress(goal.id, 5)}>+ 5</button>
-                        <button className="progress-btn" style={{ marginLeft: "auto", color: "var(--accent)" }} onClick={() => deleteGoal(goal.id)}>Remover</button>
-                      </div>
+                      <div className="goal-pct">{pct}%</div>
                     </div>
-                  );
-                })
-              )}
+                    <div className="goal-bar-bg">
+                      <div className="goal-bar-fill" style={{ width: `${pct}%`, background: cat.color }} />
+                    </div>
+                    <div className="goal-meta">
+                      <span>{goal.current} / {goal.target} {goal.unit}</span>
+                      <span style={{ color: cat.color }}>{cat.label}</span>
+                    </div>
+                    <div className="goal-actions">
+                      <button className="progress-btn" onClick={() => updateGoalProgress(goal.id, -1)}>− 1</button>
+                      <button className="progress-btn" onClick={() => updateGoalProgress(goal.id, 1)}>+ 1</button>
+                      <button className="progress-btn" onClick={() => updateGoalProgress(goal.id, 5)}>+ 5</button>
+                      <button className="progress-btn" style={{ marginLeft: "auto", color: "var(--accent)" }} onClick={() => deleteGoal(goal.id)}>Remover</button>
+                    </div>
+                  </div>
+                );
+              })}
             </>
           )}
         </div>
