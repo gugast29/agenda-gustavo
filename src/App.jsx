@@ -112,6 +112,27 @@ const styles = `
   .rick-audio-box { background: var(--card); border: 1px solid #2d4a1a; border-radius: 12px; padding: 16px; margin-top: 14px; text-align: center; }
   .rick-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; }
   .rick-error { color: #ef4444; font-size: 13px; margin-top: 10px; padding: 10px 12px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca; }
+  .deutsch-chat { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; padding: 4px 2px; margin-bottom: 12px; scroll-behavior: smooth; }
+  .msg-user { align-self: flex-end; background: var(--accent); color: white; padding: 10px 14px; border-radius: 16px 16px 4px 16px; max-width: 82%; font-size: 14px; line-height: 1.5; word-break: break-word; }
+  .msg-assistant { align-self: flex-start; background: var(--card); border: 1px solid var(--border); padding: 12px 14px; border-radius: 4px 16px 16px 16px; max-width: 88%; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+  .msg-assistant strong { font-weight: 700; color: var(--text); }
+  .deutsch-input-row { display: flex; gap: 8px; align-items: flex-end; }
+  .deutsch-input { flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: 'Epilogue', sans-serif; font-size: 15px; background: var(--bg); color: var(--text); outline: none; resize: none; min-height: 44px; max-height: 120px; }
+  .deutsch-input:focus { border-color: #3b82f6; }
+  .deutsch-send { padding: 10px 18px; border-radius: 8px; border: none; background: #1d4ed8; color: white; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; flex-shrink: 0; }
+  .deutsch-send:disabled { opacity: 0.45; cursor: not-allowed; }
+  .mode-btn { padding: 6px 13px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; cursor: pointer; font-family: 'Epilogue', sans-serif; background: var(--bg); color: var(--text2); transition: all 0.15s; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+  .mode-btn.active { background: #1e3a8a; color: #93c5fd; border-color: #1e3a8a; font-weight: 600; }
+  .level-btn { padding: 5px 11px; border-radius: 20px; border: 1px solid var(--border); font-size: 11px; cursor: pointer; font-family: 'Epilogue', sans-serif; background: var(--bg); color: var(--text2); transition: all 0.15s; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+  .level-btn.active { background: #14532d; color: #86efac; border-color: #14532d; font-weight: 600; }
+  .quick-prompt { font-size: 11px; padding: 5px 10px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg2); color: var(--text2); cursor: pointer; white-space: nowrap; font-family: 'Epilogue', sans-serif; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .quick-prompt:hover { border-color: #3b82f6; color: #3b82f6; }
+  .deutsch-header { background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); border: 1px solid #1e40af; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .deutsch-error { color: #ef4444; font-size: 13px; margin-top: 8px; padding: 8px 12px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca; }
+  .typing-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text2); margin: 0 2px; animation: bounce 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
 `;
 
 export default function Agenda() {
@@ -131,6 +152,17 @@ export default function Agenda() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGoal, setShowAddGoal] = useState(false);
+
+  // Deutsch AI Agent
+  const [deutschMessages, setDeutschMessages] = useState(() => loadData("deutsch_messages", []));
+  const [deutschInput, setDeutschInput] = useState("");
+  const [deutschApiKey, setDeutschApiKey] = useState(() => loadData("deutsch_api_key", ""));
+  const [deutschMode, setDeutschMode] = useState("conversacao");
+  const [deutschLevel, setDeutschLevel] = useState("iniciante");
+  const [deutschLoading, setDeutschLoading] = useState(false);
+  const [showDeutschSetup, setShowDeutschSetup] = useState(false);
+  const [deutschError, setDeutschError] = useState("");
+  const deutschEndRef = useRef(null);
 
   // Rick Voice AI
   const [rickText, setRickText] = useState("");
@@ -158,6 +190,9 @@ export default function Agenda() {
   useEffect(() => { saveData("agenda_tasks", tasks); }, [tasks]);
   useEffect(() => { saveData("agenda_goals", goals); }, [goals]);
   useEffect(() => { saveData("agenda_events", events); }, [events]);
+  useEffect(() => { saveData("deutsch_messages", deutschMessages.slice(-60)); }, [deutschMessages]);
+  useEffect(() => { saveData("deutsch_api_key", deutschApiKey); }, [deutschApiKey]);
+  useEffect(() => { deutschEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [deutschMessages, deutschLoading]);
   useEffect(() => { saveData("rick_api_key", rickApiKey); }, [rickApiKey]);
   useEffect(() => { saveData("rick_voice_id", rickVoiceId); }, [rickVoiceId]);
 
@@ -185,6 +220,88 @@ export default function Agenda() {
       }, diff);
     } catch (e) { console.warn(e); }
   }, [notifEnabled]);
+
+  const DEUTSCH_MODES = {
+    conversacao: { label: "💬 Conversação", desc: "conduza diálogos em alemão, corrija erros e traduza quando necessário" },
+    gramatica:   { label: "📚 Gramática",   desc: "explique regras gramaticais com exemplos claros e exercícios práticos" },
+    vocabulario: { label: "📝 Vocabulário", desc: "ensine novas palavras com gênero (der/die/das), plural e exemplos em frases" },
+    exercicios:  { label: "✏️ Exercícios",  desc: "crie exercícios adequados ao nível e corrija as respostas do aluno" },
+    correcao:    { label: "🔍 Correção",    desc: "corrija frases em alemão do aluno, explique os erros e mostre a forma correta" },
+  };
+
+  const DEUTSCH_LEVELS = {
+    iniciante:     "🌱 Iniciante (A1-A2) — vocabulário simples, frases curtas e muitas explicações",
+    intermediario: "📈 Intermediário (B1-B2) — estruturas mais complexas e textos variados",
+    avancado:      "🎓 Avançado (C1-C2) — linguagem sofisticada, nuances e expressões idiomáticas",
+  };
+
+  const DEUTSCH_QUICK = {
+    conversacao: ["Como me apresentar em alemão?", "Simule uma conversa em restaurante", "Como pedir informações na rua?"],
+    gramatica:   ["Explique os artigos der, die, das", "Como funciona o Akkusativ?", "Diferença entre sein e haben"],
+    vocabulario: ["Ensine as cores em alemão", "Números de 1 a 20", "Vocabulário essencial de viagem"],
+    exercicios:  ["Exercício com der/die/das", "Complete as frases com o verbo correto", "Tradução de frases simples"],
+    correcao:    ["Ich bin gehen zur Schule heute", "Er haben ein großes Haus", "Sie ist sehr schön Frau"],
+  };
+
+  const getDeutschSystemPrompt = () => `Você é o Professor Hans, tutor especializado em ensinar alemão para falantes de português brasileiro.
+
+REGRAS:
+- Responda SEMPRE em português, exceto exemplos em alemão
+- Em exemplos alemães, sempre forneça a tradução em português
+- Aponte similaridades e diferenças entre português e alemão quando relevante
+- Corrija erros gentilmente, mostrando a forma correta e explicando o porquê
+- Para pronúncia, compare com sons do português (ex: "ü = tente falar 'i' com lábios arredondados como 'u'")
+- Use formatação clara: palavras em alemão em destaque, exemplos em lista quando apropriado
+- Seja encorajador, paciente e didático
+- Nas respostas, use ** ** para destacar palavras-chave em alemão
+
+NÍVEL DO ALUNO: ${DEUTSCH_LEVELS[deutschLevel]}
+
+MODO ATUAL: ${DEUTSCH_MODES[deutschMode].label.toUpperCase()} — ${DEUTSCH_MODES[deutschMode].desc}`;
+
+  const sendDeutschMessage = async (text) => {
+    const messageText = text || deutschInput;
+    if (!deutschApiKey.trim()) { setShowDeutschSetup(true); setDeutschError("Configure sua API Key da Anthropic primeiro!"); return; }
+    if (!messageText.trim() || deutschLoading) return;
+
+    const userMsg = { role: "user", content: messageText };
+    const history = [...deutschMessages, userMsg];
+    setDeutschMessages(history);
+    setDeutschInput("");
+    setDeutschLoading(true);
+    setDeutschError("");
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": deutschApiKey.trim(),
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: getDeutschSystemPrompt(),
+          messages: history,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `Erro ${res.status}: verifique sua API Key`);
+      }
+
+      const data = await res.json();
+      setDeutschMessages([...history, { role: "assistant", content: data.content[0].text }]);
+    } catch (e) {
+      setDeutschError(e.message || "Erro ao conectar com a IA");
+      setDeutschMessages(deutschMessages);
+    } finally {
+      setDeutschLoading(false);
+    }
+  };
 
   const rickifyText = (text) => {
     const rickEndings = [
@@ -322,7 +439,7 @@ export default function Agenda() {
         </div>
 
         <div className="tabs">
-          {[["hoje", "📋 Hoje"], ["agenda", "📅 Agenda"], ["metas", "🎯 Metas"], ["rick", "🧪 Rick"]].map(([key, label]) => (
+          {[["hoje", "📋 Hoje"], ["agenda", "📅 Agenda"], ["metas", "🎯 Metas"], ["deutsch", "🇩🇪 Alemão"], ["rick", "🧪 Rick"]].map(([key, label]) => (
             <button key={key} className={`tab ${tab === key ? "active" : ""}`} onClick={() => setTab(key)}>{label}</button>
           ))}
         </div>
@@ -567,6 +684,135 @@ export default function Agenda() {
                   </div>
                 );
               })}
+            </>
+          )}
+
+          {tab === "deutsch" && (
+            <>
+              {/* Header */}
+              <div className="deutsch-header">
+                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#93c5fd", letterSpacing: -0.5 }}>
+                  🇩🇪 Professor Hans
+                </div>
+                <div style={{ fontSize: 12, color: "#60a5fa", marginTop: 4, lineHeight: 1.5 }}>
+                  Seu tutor de alemão pessoal — explica tudo em português
+                </div>
+              </div>
+
+              {/* API Setup */}
+              <div className="add-form" style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: deutschApiKey ? "#10b981" : "#f59e0b" }}>
+                    {deutschApiKey ? "✅ API Key configurada" : "⚠️ API Key não configurada"}
+                  </div>
+                  <button className="btn btn-secondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => setShowDeutschSetup(!showDeutschSetup)}>
+                    {showDeutschSetup ? "Fechar" : "⚙️ Configurar"}
+                  </button>
+                </div>
+                {showDeutschSetup && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 10, lineHeight: 1.7, background: "var(--bg2)", padding: "10px 12px", borderRadius: 8 }}>
+                      <strong>Como obter a API Key:</strong><br/>
+                      1. Acesse <strong>console.anthropic.com</strong> e crie uma conta<br/>
+                      2. Vá em <strong>API Keys → Create Key</strong> e copie<br/>
+                      3. Novos usuários ganham créditos grátis para testar
+                    </div>
+                    <div className="form-row">
+                      <input className="input" type="password" placeholder="sk-ant-..." value={deutschApiKey} onChange={e => setDeutschApiKey(e.target.value)} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Mode selector */}
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: "var(--text2)", letterSpacing: 1, textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>Modo</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {Object.entries(DEUTSCH_MODES).map(([key, { label }]) => (
+                    <button key={key} className={`mode-btn ${deutschMode === key ? "active" : ""}`} onClick={() => setDeutschMode(key)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Level selector */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: "var(--text2)", letterSpacing: 1, textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>Nível</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {[["iniciante", "🌱 Iniciante"], ["intermediario", "📈 Intermediário"], ["avancado", "🎓 Avançado"]].map(([key, label]) => (
+                    <button key={key} className={`level-btn ${deutschLevel === key ? "active" : ""}`} onClick={() => setDeutschLevel(key)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Chat */}
+              <div className="add-form" style={{ padding: "14px 12px" }}>
+                {/* Quick prompts */}
+                {deutschMessages.length === 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 8 }}>Sugestões para começar:</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {DEUTSCH_QUICK[deutschMode].map(p => (
+                        <button key={p} className="quick-prompt" onClick={() => sendDeutschMessage(p)}>{p}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Messages */}
+                {deutschMessages.length > 0 && (
+                  <div className="deutsch-chat">
+                    {deutschMessages.map((msg, i) => (
+                      <div key={i} className={msg.role === "user" ? "msg-user" : "msg-assistant"}>
+                        {msg.role === "assistant" && (
+                          <div style={{ fontSize: 11, color: "#3b82f6", fontWeight: 600, marginBottom: 4 }}>🎓 Professor Hans</div>
+                        )}
+                        {msg.content}
+                      </div>
+                    ))}
+                    {deutschLoading && (
+                      <div className="msg-assistant">
+                        <div style={{ fontSize: 11, color: "#3b82f6", fontWeight: 600, marginBottom: 6 }}>🎓 Professor Hans</div>
+                        <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
+                      </div>
+                    )}
+                    <div ref={deutschEndRef} />
+                  </div>
+                )}
+
+                {deutschError && <div className="deutsch-error">❌ {deutschError}</div>}
+
+                {/* Input */}
+                <div className="deutsch-input-row">
+                  <textarea
+                    className="deutsch-input"
+                    placeholder={`Mensagem para o Professor Hans... (${DEUTSCH_MODES[deutschMode].label})`}
+                    value={deutschInput}
+                    onChange={e => setDeutschInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendDeutschMessage(); } }}
+                    rows={1}
+                  />
+                  <button className="deutsch-send" onClick={() => sendDeutschMessage()} disabled={deutschLoading || !deutschInput.trim()}>
+                    Enviar
+                  </button>
+                </div>
+
+                {deutschMessages.length > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {DEUTSCH_QUICK[deutschMode].map(p => (
+                        <button key={p} className="quick-prompt" onClick={() => sendDeutschMessage(p)}>{p}</button>
+                      ))}
+                    </div>
+                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: "4px 10px", flexShrink: 0 }} onClick={() => setDeutschMessages([])}>
+                      Limpar
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
 
