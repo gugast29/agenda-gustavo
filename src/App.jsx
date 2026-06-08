@@ -261,7 +261,7 @@ MODO ATUAL: ${DEUTSCH_MODES[deutschMode].label.toUpperCase()} — ${DEUTSCH_MODE
 
   const sendDeutschMessage = async (text) => {
     const messageText = text || deutschInput;
-    if (!deutschApiKey.trim()) { setShowDeutschSetup(true); setDeutschError("Configure sua API Key da Anthropic primeiro!"); return; }
+    if (!deutschApiKey.trim()) { setShowDeutschSetup(true); setDeutschError("Configure sua API Key do Google Gemini primeiro!"); return; }
     if (!messageText.trim() || deutschLoading) return;
 
     const userMsg = { role: "user", content: messageText };
@@ -272,21 +272,24 @@ MODO ATUAL: ${DEUTSCH_MODES[deutschMode].label.toUpperCase()} — ${DEUTSCH_MODE
     setDeutschError("");
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": deutschApiKey.trim(),
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1024,
-          system: getDeutschSystemPrompt(),
-          messages: history,
-        }),
-      });
+      // Gemini usa os papéis "user" e "model" (em vez de "assistant")
+      const contents = history.map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${deutschApiKey.trim()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: getDeutschSystemPrompt() }] },
+            contents,
+            generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+          }),
+        }
+      );
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -294,7 +297,9 @@ MODO ATUAL: ${DEUTSCH_MODES[deutschMode].label.toUpperCase()} — ${DEUTSCH_MODE
       }
 
       const data = await res.json();
-      setDeutschMessages([...history, { role: "assistant", content: data.content[0].text }]);
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!reply) throw new Error("A IA não retornou resposta. Tente novamente.");
+      setDeutschMessages([...history, { role: "assistant", content: reply }]);
     } catch (e) {
       setDeutschError(e.message || "Erro ao conectar com a IA");
       setDeutschMessages(deutschMessages);
@@ -712,13 +717,14 @@ MODO ATUAL: ${DEUTSCH_MODES[deutschMode].label.toUpperCase()} — ${DEUTSCH_MODE
                 {showDeutschSetup && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 10, lineHeight: 1.7, background: "var(--bg2)", padding: "10px 12px", borderRadius: 8 }}>
-                      <strong>Como obter a API Key:</strong><br/>
-                      1. Acesse <strong>console.anthropic.com</strong> e crie uma conta<br/>
-                      2. Vá em <strong>API Keys → Create Key</strong> e copie<br/>
-                      3. Novos usuários ganham créditos grátis para testar
+                      <strong>Como obter a API Key (100% grátis):</strong><br/>
+                      1. Acesse <strong>aistudio.google.com/apikey</strong><br/>
+                      2. Faça login com sua conta <strong>Google</strong><br/>
+                      3. Clique em <strong>"Create API key"</strong> e copie<br/>
+                      ✅ Sem cartão de crédito, sem cobrança!
                     </div>
                     <div className="form-row">
-                      <input className="input" type="password" placeholder="sk-ant-..." value={deutschApiKey} onChange={e => setDeutschApiKey(e.target.value)} />
+                      <input className="input" type="password" placeholder="Cole sua API Key do Google Gemini" value={deutschApiKey} onChange={e => setDeutschApiKey(e.target.value)} />
                     </div>
                   </div>
                 )}
