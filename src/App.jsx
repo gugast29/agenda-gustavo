@@ -12,6 +12,25 @@ const CATEGORIES = {
   outro: { label: "Outro", color: "#6b7280", icon: "📌" },
 };
 
+const FIN_CATEGORIES = {
+  salario:     { label: "Salário",      color: "#10b981", icon: "💼", type: "receita" },
+  freelance:   { label: "Freelance",    color: "#22c55e", icon: "💻", type: "receita" },
+  investimento:{ label: "Investimento", color: "#14b8a6", icon: "📈", type: "receita" },
+  outros_rec:  { label: "Outras receitas", color: "#84cc16", icon: "💵", type: "receita" },
+  alimentacao: { label: "Alimentação",  color: "#f59e0b", icon: "🍔", type: "despesa" },
+  transporte:  { label: "Transporte",   color: "#3b82f6", icon: "🚗", type: "despesa" },
+  moradia:     { label: "Moradia",      color: "#8b5cf6", icon: "🏠", type: "despesa" },
+  lazer:       { label: "Lazer",        color: "#ec4899", icon: "🎮", type: "despesa" },
+  saude_fin:   { label: "Saúde",        color: "#ef4444", icon: "💊", type: "despesa" },
+  educacao:    { label: "Educação",     color: "#06b6d4", icon: "📚", type: "despesa" },
+  compras:     { label: "Compras",      color: "#f97316", icon: "🛍️", type: "despesa" },
+  contas:      { label: "Contas",       color: "#6366f1", icon: "🧾", type: "despesa" },
+  outros_desp: { label: "Outras despesas", color: "#6b7280", icon: "📌", type: "despesa" },
+};
+
+const formatBRL = (v) =>
+  (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 function loadData(key, fallback) {
   try {
     const item = window.localStorage.getItem(key);
@@ -133,6 +152,32 @@ const styles = `
   .typing-dot:nth-child(2) { animation-delay: 0.2s; }
   .typing-dot:nth-child(3) { animation-delay: 0.4s; }
   @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+  .fin-balance { background: linear-gradient(135deg, #1a1814 0%, #2d2820 100%); border-radius: 16px; padding: 20px; margin-bottom: 14px; color: #fff; position: relative; overflow: hidden; }
+  .fin-balance::after { content: ''; position: absolute; top: -40px; right: -40px; width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle, rgba(200,75,49,0.25), transparent 70%); }
+  .fin-balance-label { font-size: 12px; color: #aaa; letter-spacing: 1px; text-transform: uppercase; font-weight: 600; }
+  .fin-balance-value { font-family: 'Syne', sans-serif; font-size: 34px; font-weight: 800; margin-top: 4px; letter-spacing: -1px; line-height: 1; }
+  .fin-balance-sub { font-size: 12px; color: #888; margin-top: 8px; }
+  .fin-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .fin-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .fin-card-label { font-size: 11px; color: var(--text2); letter-spacing: 0.5px; display: flex; align-items: center; gap: 5px; }
+  .fin-card-value { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; margin-top: 4px; letter-spacing: -0.5px; }
+  .fin-month-nav { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; }
+  .fin-month-label { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; }
+  .fin-breakdown-item { margin-bottom: 12px; }
+  .fin-breakdown-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 13px; }
+  .fin-breakdown-bar-bg { height: 8px; background: var(--bg2); border-radius: 4px; overflow: hidden; }
+  .fin-breakdown-bar { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .fin-budget-warn { font-size: 11px; font-weight: 600; }
+  .fin-tx { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
+  .fin-tx-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .fin-tx-body { flex: 1; min-width: 0; }
+  .fin-tx-name { font-size: 14px; font-weight: 500; word-break: break-word; }
+  .fin-tx-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .fin-tx-amount { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .fin-type-toggle { display: flex; gap: 8px; margin-bottom: 10px; }
+  .fin-type-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .fin-type-btn.active-receita { background: #10b981; color: #fff; border-color: #10b981; }
+  .fin-type-btn.active-despesa { background: #ef4444; color: #fff; border-color: #ef4444; }
 `;
 
 export default function Agenda() {
@@ -152,6 +197,14 @@ export default function Agenda() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGoal, setShowAddGoal] = useState(false);
+
+  // Finanças
+  const [transactions, setTransactions] = useState(() => loadData("fin_transactions", []));
+  const [budgets, setBudgets] = useState(() => loadData("fin_budgets", {}));
+  const [finMonth, setFinMonth] = useState(new Date());
+  const [showAddTx, setShowAddTx] = useState(false);
+  const [showBudgets, setShowBudgets] = useState(false);
+  const [newTx, setNewTx] = useState({ type: "despesa", amount: "", category: "alimentacao", desc: "", date: todayStr });
 
   // Deutsch AI Agent
   const [deutschMessages, setDeutschMessages] = useState(() => loadData("deutsch_messages", []));
@@ -190,6 +243,8 @@ export default function Agenda() {
   useEffect(() => { saveData("agenda_tasks", tasks); }, [tasks]);
   useEffect(() => { saveData("agenda_goals", goals); }, [goals]);
   useEffect(() => { saveData("agenda_events", events); }, [events]);
+  useEffect(() => { saveData("fin_transactions", transactions); }, [transactions]);
+  useEffect(() => { saveData("fin_budgets", budgets); }, [budgets]);
   useEffect(() => { saveData("deutsch_messages", deutschMessages.slice(-60)); }, [deutschMessages]);
   useEffect(() => { saveData("deutsch_api_key", deutschApiKey); }, [deutschApiKey]);
   useEffect(() => { deutschEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [deutschMessages, deutschLoading]);
@@ -220,6 +275,31 @@ export default function Agenda() {
       }, diff);
     } catch (e) { console.warn(e); }
   }, [notifEnabled]);
+
+  // ===== Finanças =====
+  const addTransaction = () => {
+    const amount = parseFloat(String(newTx.amount).replace(",", "."));
+    if (!amount || amount <= 0) return;
+    setTransactions(t => [...t, { ...newTx, id: Date.now(), amount }]);
+    setNewTx({ type: newTx.type, amount: "", category: newTx.category, desc: "", date: todayStr });
+    setShowAddTx(false);
+  };
+  const deleteTransaction = (id) => setTransactions(t => t.filter(tx => tx.id !== id));
+  const setBudget = (cat, value) => setBudgets(b => ({ ...b, [cat]: parseFloat(String(value).replace(",", ".")) || 0 }));
+
+  const finMonthStr = `${finMonth.getFullYear()}-${String(finMonth.getMonth() + 1).padStart(2, "0")}`;
+  const monthTx = transactions.filter(tx => tx.date?.startsWith(finMonthStr));
+  const monthIncome = monthTx.filter(tx => tx.type === "receita").reduce((s, tx) => s + tx.amount, 0);
+  const monthExpense = monthTx.filter(tx => tx.type === "despesa").reduce((s, tx) => s + tx.amount, 0);
+  const monthBalance = monthIncome - monthExpense;
+
+  // Gastos por categoria (despesas do mês), ordenado do maior pro menor
+  const expenseByCat = {};
+  monthTx.filter(tx => tx.type === "despesa").forEach(tx => {
+    expenseByCat[tx.category] = (expenseByCat[tx.category] || 0) + tx.amount;
+  });
+  const expenseBreakdown = Object.entries(expenseByCat).sort((a, b) => b[1] - a[1]);
+  const sortedMonthTx = [...monthTx].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 
   const DEUTSCH_MODES = {
     conversacao: { label: "💬 Conversação", desc: "conduza diálogos em alemão, corrija erros e traduza quando necessário" },
@@ -444,7 +524,7 @@ MODO ATUAL: ${DEUTSCH_MODES[deutschMode].label.toUpperCase()} — ${DEUTSCH_MODE
         </div>
 
         <div className="tabs">
-          {[["hoje", "📋 Hoje"], ["agenda", "📅 Agenda"], ["metas", "🎯 Metas"], ["deutsch", "🇩🇪 Alemão"], ["rick", "🧪 Rick"]].map(([key, label]) => (
+          {[["hoje", "📋 Hoje"], ["agenda", "📅 Agenda"], ["metas", "🎯 Metas"], ["financas", "💰 Finanças"], ["deutsch", "🇩🇪 Alemão"], ["rick", "🧪 Rick"]].map(([key, label]) => (
             <button key={key} className={`tab ${tab === key ? "active" : ""}`} onClick={() => setTab(key)}>{label}</button>
           ))}
         </div>
@@ -686,6 +766,148 @@ MODO ATUAL: ${DEUTSCH_MODES[deutschMode].label.toUpperCase()} — ${DEUTSCH_MODE
                       <button className="progress-btn" onClick={() => updateGoalProgress(goal.id, 5)}>+ 5</button>
                       <button className="progress-btn" style={{ marginLeft: "auto", color: "var(--accent)" }} onClick={() => deleteGoal(goal.id)}>Remover</button>
                     </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {tab === "financas" && (
+            <>
+              {/* Navegação de mês */}
+              <div className="fin-month-nav">
+                <button className="cal-nav" onClick={() => setFinMonth(new Date(finMonth.getFullYear(), finMonth.getMonth() - 1, 1))}>‹</button>
+                <div className="fin-month-label">{MONTHS[finMonth.getMonth()]} {finMonth.getFullYear()}</div>
+                <button className="cal-nav" onClick={() => setFinMonth(new Date(finMonth.getFullYear(), finMonth.getMonth() + 1, 1))}>›</button>
+              </div>
+
+              {/* Saldo do mês */}
+              <div className="fin-balance">
+                <div className="fin-balance-label">Saldo do mês</div>
+                <div className="fin-balance-value" style={{ color: monthBalance >= 0 ? "#86efac" : "#fca5a5" }}>
+                  {formatBRL(monthBalance)}
+                </div>
+                <div className="fin-balance-sub">
+                  {monthBalance >= 0 ? "🟢 Você está no positivo!" : "🔴 Atenção: gastos acima da receita"}
+                </div>
+              </div>
+
+              {/* Receitas e Despesas */}
+              <div className="fin-cards">
+                <div className="fin-card">
+                  <div className="fin-card-label">⬆️ Receitas</div>
+                  <div className="fin-card-value" style={{ color: "#10b981" }}>{formatBRL(monthIncome)}</div>
+                </div>
+                <div className="fin-card">
+                  <div className="fin-card-label">⬇️ Despesas</div>
+                  <div className="fin-card-value" style={{ color: "#ef4444" }}>{formatBRL(monthExpense)}</div>
+                </div>
+              </div>
+
+              {/* Botões de ação */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => { setShowAddTx(!showAddTx); setShowBudgets(false); }}>
+                  {showAddTx ? "✕ Fechar" : "+ Lançamento"}
+                </button>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setShowBudgets(!showBudgets); setShowAddTx(false); }}>
+                  {showBudgets ? "✕ Fechar" : "🎯 Orçamento"}
+                </button>
+              </div>
+
+              {/* Form de lançamento */}
+              {showAddTx && (
+                <div className="add-form">
+                  <div className="fin-type-toggle">
+                    <button
+                      className={`fin-type-btn ${newTx.type === "receita" ? "active-receita" : ""}`}
+                      onClick={() => setNewTx({ ...newTx, type: "receita", category: "salario" })}
+                    >⬆️ Receita</button>
+                    <button
+                      className={`fin-type-btn ${newTx.type === "despesa" ? "active-despesa" : ""}`}
+                      onClick={() => setNewTx({ ...newTx, type: "despesa", category: "alimentacao" })}
+                    >⬇️ Despesa</button>
+                  </div>
+                  <div className="form-row">
+                    <input className="input" type="number" inputMode="decimal" placeholder="Valor (R$)" value={newTx.amount} onChange={e => setNewTx({ ...newTx, amount: e.target.value })} />
+                    <select className="select" value={newTx.category} onChange={e => setNewTx({ ...newTx, category: e.target.value })}>
+                      {Object.entries(FIN_CATEGORIES).filter(([, v]) => v.type === newTx.type).map(([k, v]) => (
+                        <option key={k} value={k}>{v.icon} {v.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-row">
+                    <input className="input" placeholder="Descrição (opcional)" value={newTx.desc} onChange={e => setNewTx({ ...newTx, desc: e.target.value })} />
+                  </div>
+                  <div className="form-row">
+                    <input className="input" type="date" value={newTx.date} onChange={e => setNewTx({ ...newTx, date: e.target.value })} />
+                    <button className="btn btn-primary" onClick={addTransaction}>Salvar</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Definição de orçamento por categoria */}
+              {showBudgets && (
+                <div className="add-form">
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 12, lineHeight: 1.6 }}>
+                    Defina um limite mensal por categoria. O app te avisa quando você se aproximar ou estourar. 🎯
+                  </div>
+                  {Object.entries(FIN_CATEGORIES).filter(([, v]) => v.type === "despesa").map(([k, v]) => (
+                    <div key={k} className="form-row" style={{ alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 13, minWidth: 130, display: "flex", alignItems: "center", gap: 6 }}>{v.icon} {v.label}</span>
+                      <input className="input" type="number" inputMode="decimal" placeholder="Sem limite" value={budgets[k] || ""} onChange={e => setBudget(k, e.target.value)} style={{ maxWidth: 130 }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Gastos por categoria */}
+              {expenseBreakdown.length > 0 && (
+                <>
+                  <div className="section-title">Para onde foi o dinheiro</div>
+                  {expenseBreakdown.map(([cat, value]) => {
+                    const c = FIN_CATEGORIES[cat] || FIN_CATEGORIES.outros_desp;
+                    const pct = monthExpense > 0 ? Math.round((value / monthExpense) * 100) : 0;
+                    const budget = budgets[cat];
+                    const budgetPct = budget > 0 ? Math.round((value / budget) * 100) : null;
+                    return (
+                      <div key={cat} className="fin-breakdown-item">
+                        <div className="fin-breakdown-top">
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{c.icon} {c.label}</span>
+                          <span style={{ fontWeight: 600 }}>{formatBRL(value)} <span style={{ color: "var(--text2)", fontWeight: 400 }}>({pct}%)</span></span>
+                        </div>
+                        <div className="fin-breakdown-bar-bg">
+                          <div className="fin-breakdown-bar" style={{ width: `${pct}%`, background: c.color }} />
+                        </div>
+                        {budgetPct !== null && (
+                          <div className="fin-budget-warn" style={{ marginTop: 4, color: budgetPct >= 100 ? "#ef4444" : budgetPct >= 80 ? "#f59e0b" : "var(--text2)" }}>
+                            {budgetPct >= 100 ? "🚨 Estourou o orçamento" : budgetPct >= 80 ? "⚠️ Perto do limite" : "✅ Dentro do orçamento"}
+                            {" "}— {formatBRL(value)} de {formatBRL(budget)} ({budgetPct}%)
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Histórico de lançamentos */}
+              <div className="section-title">Lançamentos de {MONTHS[finMonth.getMonth()]}</div>
+              {sortedMonthTx.length === 0 ? (
+                <div className="empty"><div className="empty-icon">💰</div>Nenhum lançamento neste mês.<br/>Toque em "+ Lançamento" para começar!</div>
+              ) : sortedMonthTx.map(tx => {
+                const c = FIN_CATEGORIES[tx.category] || FIN_CATEGORIES.outros_desp;
+                const isIncome = tx.type === "receita";
+                return (
+                  <div key={tx.id} className="fin-tx">
+                    <div className="fin-tx-icon" style={{ background: c.color + "22" }}>{c.icon}</div>
+                    <div className="fin-tx-body">
+                      <div className="fin-tx-name">{tx.desc || c.label}</div>
+                      <div className="fin-tx-meta">{c.label} · {tx.date.split("-").reverse().join("/")}</div>
+                    </div>
+                    <div className="fin-tx-amount" style={{ color: isIncome ? "#10b981" : "#ef4444" }}>
+                      {isIncome ? "+" : "−"} {formatBRL(tx.amount)}
+                    </div>
+                    <button className="task-delete" onClick={() => deleteTransaction(tx.id)}>✕</button>
                   </div>
                 );
               })}
