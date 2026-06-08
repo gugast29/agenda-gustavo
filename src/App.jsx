@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -102,6 +102,16 @@ const styles = `
   .stat-lbl { font-size: 10px; color: var(--text2); margin-top: 4px; letter-spacing: 0.5px; }
   .notif-banner { background: #fff8f0; border: 1px solid #e8a87c; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; color: #7a4a20; display: flex; align-items: center; gap: 8px; }
   .row-space { display: flex; justify-content: space-between; align-items: center; }
+  .rick-textarea { width: 100%; min-height: 110px; resize: vertical; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: 'Epilogue', sans-serif; font-size: 15px; background: var(--bg); color: var(--text); outline: none; }
+  .rick-textarea:focus { border-color: #97ce4c; }
+  .rick-header { background: linear-gradient(135deg, #1a2e0a 0%, #0d1a0d 100%); border: 1px solid #2d4a1a; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .rick-chip { font-size: 11px; padding: 5px 10px; border-radius: 20px; border: 1px solid #2d4a1a; background: #0d1a0d; color: #97ce4c; cursor: pointer; white-space: nowrap; font-family: 'Epilogue', sans-serif; transition: background 0.15s; }
+  .rick-chip:hover { background: #1a2e0a; }
+  .rick-speak-btn { width: 100%; padding: 14px; border-radius: 10px; border: none; background: #97ce4c; color: #0d1a0d; font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 800; cursor: pointer; transition: opacity 0.2s; letter-spacing: 0.5px; }
+  .rick-speak-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .rick-audio-box { background: var(--card); border: 1px solid #2d4a1a; border-radius: 12px; padding: 16px; margin-top: 14px; text-align: center; }
+  .rick-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; }
+  .rick-error { color: #ef4444; font-size: 13px; margin-top: 10px; padding: 10px 12px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca; }
 `;
 
 export default function Agenda() {
@@ -122,6 +132,17 @@ export default function Agenda() {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGoal, setShowAddGoal] = useState(false);
 
+  // Rick Voice AI
+  const [rickText, setRickText] = useState("");
+  const [rickApiKey, setRickApiKey] = useState(() => loadData("rick_api_key", ""));
+  const [rickVoiceId, setRickVoiceId] = useState(() => loadData("rick_voice_id", "VR6AewLTigWG4xSOukaG"));
+  const [rickLoading, setRickLoading] = useState(false);
+  const [rickError, setRickError] = useState("");
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [rickModeOn, setRickModeOn] = useState(true);
+  const [showRickSetup, setShowRickSetup] = useState(false);
+  const rickAudioRef = useRef(null);
+
   // Load from localStorage after mount (safe for Safari)
   useEffect(() => {
     setTasks(loadData("agenda_tasks", []));
@@ -137,6 +158,8 @@ export default function Agenda() {
   useEffect(() => { saveData("agenda_tasks", tasks); }, [tasks]);
   useEffect(() => { saveData("agenda_goals", goals); }, [goals]);
   useEffect(() => { saveData("agenda_events", events); }, [events]);
+  useEffect(() => { saveData("rick_api_key", rickApiKey); }, [rickApiKey]);
+  useEffect(() => { saveData("rick_voice_id", rickVoiceId); }, [rickVoiceId]);
 
   const requestNotifications = async () => {
     if (!("Notification" in window)) return alert("Seu navegador não suporta notificações.");
@@ -162,6 +185,71 @@ export default function Agenda() {
       }, diff);
     } catch (e) { console.warn(e); }
   }, [notifEnabled]);
+
+  const rickifyText = (text) => {
+    const rickEndings = [
+      " Wubba lubba dub dub!",
+      " Get schwifty!",
+      " Sou o Pickle Rick!",
+      " Morty, você consegue acreditar nisso?",
+      " E é assim que as notícias vão!",
+      " Rikki-tikki-tavi!",
+      " Morty, eu sou um gênio!",
+    ];
+    const midPhrases = [
+      ", Morty,", ", escuta só,", ", obviamente,", ", cara,",
+    ];
+    let result = text.trim();
+    // Insert a Rick-ish filler in the middle of longer texts
+    if (result.length > 40) {
+      const words = result.split(" ");
+      const midIdx = Math.floor(words.length / 2);
+      const filler = midPhrases[Math.floor(Math.random() * midPhrases.length)];
+      words.splice(midIdx, 0, filler);
+      result = words.join(" ").replace(/,\s+,/g, ",");
+    }
+    result += rickEndings[Math.floor(Math.random() * rickEndings.length)];
+    return result;
+  };
+
+  const speakAsRick = async () => {
+    if (!rickApiKey.trim()) {
+      setShowRickSetup(true);
+      setRickError("Configure sua API Key do ElevenLabs primeiro!");
+      return;
+    }
+    if (!rickText.trim()) {
+      setRickError("Digite algum texto para o Rick falar!");
+      return;
+    }
+    setRickLoading(true);
+    setRickError("");
+    if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null); }
+    const textToSpeak = rickModeOn ? rickifyText(rickText) : rickText;
+    try {
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${rickVoiceId.trim()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "xi-api-key": rickApiKey.trim() },
+        body: JSON.stringify({
+          text: textToSpeak,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: { stability: 0.3, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail?.message || `Erro ${res.status}: verifique sua API Key e Voice ID`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setAudioUrl(url);
+      setTimeout(() => rickAudioRef.current?.play(), 100);
+    } catch (e) {
+      setRickError(e.message || "Erro ao gerar áudio");
+    } finally {
+      setRickLoading(false);
+    }
+  };
 
   const addTask = (overrideDate) => {
     if (!newTask.name.trim()) return;
@@ -234,7 +322,7 @@ export default function Agenda() {
         </div>
 
         <div className="tabs">
-          {[["hoje", "📋 Hoje"], ["agenda", "📅 Agenda"], ["metas", "🎯 Metas"]].map(([key, label]) => (
+          {[["hoje", "📋 Hoje"], ["agenda", "📅 Agenda"], ["metas", "🎯 Metas"], ["rick", "🧪 Rick"]].map(([key, label]) => (
             <button key={key} className={`tab ${tab === key ? "active" : ""}`} onClick={() => setTab(key)}>{label}</button>
           ))}
         </div>
@@ -479,6 +567,94 @@ export default function Agenda() {
                   </div>
                 );
               })}
+            </>
+          )}
+
+          {tab === "rick" && (
+            <>
+              <div className="rick-header">
+                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#97ce4c", letterSpacing: -0.5 }}>
+                  🧪 Rick Voice AI
+                </div>
+                <div style={{ fontSize: 12, color: "#7aad3a", marginTop: 4, lineHeight: 1.5 }}>
+                  Digite um texto e o Rick vai ler com a voz dele via ElevenLabs
+                </div>
+              </div>
+
+              {/* API Setup */}
+              <div className="add-form" style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: rickApiKey ? "#10b981" : "#f59e0b" }}>
+                    {rickApiKey ? "✅ API Key configurada" : "⚠️ API Key não configurada"}
+                  </div>
+                  <button className="btn btn-secondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => setShowRickSetup(!showRickSetup)}>
+                    {showRickSetup ? "Fechar" : "⚙️ Configurar"}
+                  </button>
+                </div>
+
+                {showRickSetup && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 12, lineHeight: 1.7, background: "var(--bg2)", padding: "10px 12px", borderRadius: 8 }}>
+                      <strong>Como configurar:</strong><br/>
+                      1. Crie conta grátis em <strong>elevenlabs.io</strong> (10k chars/mês grátis)<br/>
+                      2. Vá em <strong>Profile Settings → API Keys</strong> e copie sua key<br/>
+                      3. Na <strong>Voice Library</strong>, busque por <strong>"Rick Sanchez"</strong> e adicione à sua conta<br/>
+                      4. Copie o <strong>Voice ID</strong> da voz adicionada e cole abaixo
+                    </div>
+                    <div className="form-row">
+                      <input className="input" type="password" placeholder="xi-api-key do ElevenLabs" value={rickApiKey} onChange={e => setRickApiKey(e.target.value)} />
+                    </div>
+                    <div className="form-row">
+                      <input className="input" placeholder="Voice ID (padrão: Arnold — grave/rouco)" value={rickVoiceId} onChange={e => setRickVoiceId(e.target.value)} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Text Input */}
+              <div className="add-form">
+                <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 8 }}>Frases rápidas do Rick:</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {[
+                    "Wubba lubba dub dub!",
+                    "Sou o Pickle Rick!",
+                    "Get schwifty!",
+                    "Morty, precisamos ir agora!",
+                    "Eu sou um gênio, Morty.",
+                  ].map(phrase => (
+                    <button key={phrase} className="rick-chip" onClick={() => setRickText(phrase)}>{phrase}</button>
+                  ))}
+                </div>
+
+                <textarea
+                  className="rick-textarea"
+                  placeholder="Digite o que o Rick vai falar..."
+                  value={rickText}
+                  onChange={e => setRickText(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                />
+
+                <label className="rick-toggle">
+                  <input type="checkbox" checked={rickModeOn} onChange={e => setRickModeOn(e.target.checked)} />
+                  <span style={{ fontSize: 13 }}>🧬 <strong>Modo Rick</strong> — adiciona frases e vícios de linguagem automaticamente</span>
+                </label>
+
+                <button className="rick-speak-btn" onClick={speakAsRick} disabled={rickLoading}>
+                  {rickLoading ? "⏳ Gerando com o ElevenLabs..." : "🎙️ Falar como o Rick!"}
+                </button>
+
+                {rickError && <div className="rick-error">❌ {rickError}</div>}
+              </div>
+
+              {audioUrl && (
+                <div className="rick-audio-box">
+                  <div style={{ fontSize: 13, color: "#7aad3a", marginBottom: 10, fontWeight: 600 }}>🔊 Wubba lubba dub dub! Ouça:</div>
+                  <audio ref={rickAudioRef} controls src={audioUrl} style={{ width: "100%" }} />
+                  <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 8 }}>
+                    Áudio gerado pelo ElevenLabs — {new Date().toLocaleTimeString("pt-BR")}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
